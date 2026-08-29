@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# PRIVATE DATA — never commit.
+# The X archive contains your email address, phone number, direct messages,
+# contact book, and an IP audit log. Everything derived from it is equally
+# sensitive, including the ciphertext store (metadata leaks) and the index.
+# ---------------------------------------------------------------------------
+twitter-*/
+data/
+corpus/
+store/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+audit.log
+grants.json
+.dev/
+.env
+.env.*
+!.env.example
+
+# Build / tooling
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store

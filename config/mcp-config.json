@@ -1,0 +1,21 @@
+{
+  "$comment": [
+    "Register the vault with Claude Code:",
+    "  claude mcp add-json personal-twitter-vault \"$(cat config/mcp-config.json | jq -c '.mcpServers[\"personal-twitter-vault\"]')\"",
+    "or copy the mcpServers block into your Claude Code MCP settings.",
+    "",
+    "Replace /Users/adamplace/adam-id with an absolute path if you move the repo.",
+    "VAULT_SCOPES omits dms.read on purpose: direct messages contain other people's",
+    "words, so grant it only for a session that genuinely needs them."
+  ],
+  "mcpServers": {
+    "personal-twitter-vault": {
+      "command": "npx",
+      "args": ["tsx", "src/cli.ts", "serve"],
+      "cwd": "/Users/adamplace/adam-id",
+      "env": {
+        "VAULT_SCOPES": "tweets.read,likes.read,graph.read,media.read,analytics.read"
+      }
+    }
+  }
+}

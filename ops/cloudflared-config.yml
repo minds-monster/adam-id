@@ -1,0 +1,82 @@
+# Cloudflare Tunnel for the adam-id vault and its credential issuer.
+#
+# One tunnel, two hostnames. Both origins are on loopback: the tunnel is the only
+# way in, and it terminates on this machine, so the archive and the vault key
+# never leave it.
+#
+# Install:
+#   cloudflared tunnel login                 # browser; pick the minds.monster zone
+#   cloudflared tunnel create adam-id
+#   cloudflared tunnel route dns adam-id issuer.minds.monster
+#   cloudflared tunnel route dns adam-id vault.minds.monster
+#   cp ops/cloudflared-config.yml ~/.cloudflared/config.yml
+#   # set `tunnel:` below to the UUID printed by `tunnel create`
+#   cloudflared tunnel run adam-id
+#
+# Access policies are configured in the Cloudflare dashboard (Zero Trust →
+# Access → Applications), not here. Two are required:
+#
+#   1. vault.minds.monster/*            → Service Auth, service token only.
+#   2. issuer.minds.monster/.well-known/* → Bypass, Everyone.
+#
+# (2) is not optional and is easy to get wrong: adam-id fetches the issuer's
+# signing keys from /.well-known/jwt-vc-issuer *unauthenticated*, before it has
+# any credential to present. Put Access in front of that path and every
+# verification fails with jwks_unreachable. Everything else on the issuer host
+# should stay locked down — /admin/issue-sd-jwt mints bearer credentials.
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /Users/adamplace/.cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+# Prefer HTTP/2 to QUIC when a network blocks UDP; harmless otherwise.
+protocol: auto
+loglevel: info
+
+ingress:
+  # The credential issuer, restricted to the paths that genuinely have to be
+  # public: issuer metadata (JWKS) and revocation status, both of which adam-id
+  # reads over the network, unauthenticated, before it holds any credential.
+  #
+  # Everything else on this host — above all /admin/issue-sd-jwt, which mints
+  # bearer credentials — is deliberately NOT routed. Minting is done over
+  # 127.0.0.1 by an operator on this machine; there is no reason for the internet
+  # to be able to reach it, and "guarded by an API key header" is a thin defence
+  # for an endpoint that hands out access to a private archive. This is enforced
+  # here rather than only in Access so that it holds even if a dashboard policy
+  # is missing, reordered, or mistakenly set to Allow instead of Bypass.
+  - hostname: issuer.minds.monster
+    path: ^/(\.well-known|revocation-status|credential-status)(/.*)?$
+    service: http://127.0.0.1:3000
+    originRequest:
+      connectTimeout: 10s
+      # The Host header the origin sees. NestJS does not care, but keeping it
+      # explicit avoids surprises if a vhost is ever added.
+      httpHostHeader: issuer.minds.monster
+
+  # Public Mind-connect flow. adam-id calls /admin/issue-sd-jwt over the public
+  # hostname, so /admin/* is routed through the tunnel and protected by a
+  # Cloudflare Access Service Auth policy (NOT an identity Allow policy).
+  - hostname: issuer.minds.monster
+    path: ^/admin(/.*)?$
+    service: http://127.0.0.1:3000
+    originRequest:
+      connectTimeout: 10s
+      httpHostHeader: issuer.minds.monster
+
+  # Any other path on the issuer host does not exist as far as the internet is
+  # concerned.
+  - hostname: issuer.minds.monster
+    service: http_status:404
+
+  # The MCP vault. Sits behind an Access service token in addition to the
+  # credential — see the note above.
+  - hostname: vault.minds.monster
+    service: http://127.0.0.1:8787
+    originRequest:
+      connectTimeout: 10s
+      # MCP responses can be large (get_media returns inline base64 images).
+      noHappyEyeballs: false
+      httpHostHeader: vault.minds.monster
+
+  # Anything else that reaches this tunnel is a misconfiguration, not traffic.
+  - service: http_status:404

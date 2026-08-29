@@ -1,0 +1,39 @@
+{
+  "name": "adam-id",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal X data vault with an MCP server for AI-assisted tweet composition",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "vault": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "serve": "tsx src/mcp/server.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "smoke:http": "tsx scripts/smoke-http.ts",
+    "smoke:credential": "tsx scripts/verify-credential-checks.ts",
+    "smoke:issuer": "tsx scripts/smoke-issuer.ts",
+    "verify:tunnel": "tsx ops/verify-tunnel.ts",
+    "install-vault-playbook": "node --import tsx scripts/install-vault-playbook.ts",
+    "smoke:all": "npm run smoke && npm run smoke:credential && npm run smoke:http",
+    "mint-test-credential": "tsx scripts/mint-test-credential.ts"
+  },
+  "dependencies": {
+    "@animocabrands/minds-client-lib": "^0.1.3",
+    "@mocanetwork/airkit": "^1.10.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "better-sqlite3": "^11.8.0",
+    "jose": "^5.9.6",
+    "viem": "^2.21.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

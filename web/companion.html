@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>adam-id — Moca identity companion</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 15px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+         background: #0f1115; color: #e6e6e6; margin: 0; padding: 2.5rem 1.5rem; }
+  main { max-width: 44rem; margin: 0 auto; }
+  h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
+  p.sub { color: #8b95a5; margin: 0 0 1.75rem; }
+  section { border: 1px solid #262b36; border-radius: 8px; padding: 1rem 1.15rem; margin-bottom: 1rem; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: #8b95a5; margin: 0 0 .75rem; }
+  button { font: inherit; background: #1d2530; color: #e6e6e6; border: 1px solid #33405280;
+           border-radius: 6px; padding: .45rem .9rem; cursor: pointer; margin: 0 .4rem .4rem 0; }
+  button:hover:not(:disabled) { background: #26313f; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  input { font: inherit; background: #0b0d11; color: #e6e6e6; border: 1px solid #262b36;
+          border-radius: 6px; padding: .4rem .55rem; width: 100%; box-sizing: border-box; }
+  pre { background: #0b0d11; border: 1px solid #1c212b; border-radius: 6px; padding: .7rem .8rem;
+        overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: .6rem 0 0; font-size: 13px; }
+  .note { color: #b3892a; }
+  .ok { color: #4caf7d; }
+  .err { color: #e26d6d; }
+  label { display: block; color: #8b95a5; font-size: .8rem; margin: .6rem 0 .25rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Moca identity companion</h1>
+  <p class="sub">Run this locally to register the vault agent's key with your Moca account.</p>
+
+  <section>
+    <h2>Why this page exists</h2>
+    <p style="margin:0">
+      <code>@mocanetwork/airkit</code> is browser-only — <code>AirService</code> drives
+      <code>HTMLIFrameElement</code> and cannot be imported into the Node MCP server.
+      Anything needing AIR Kit (login, agent keys, credential issuance) happens here;
+      the server consumes only the results.
+    </p>
+  </section>
+
+  <section>
+    <h2>1 · Connect</h2>
+    <label for="partner">Partner ID</label>
+    <input id="partner" value="3dd91077-c6db-4cb6-9f8d-1d603b85f8ee" />
+    <div style="margin-top:.75rem">
+      <button id="init">Init + Login</button>
+      <button id="whoami" disabled>Who am I</button>
+      <button id="logout" disabled>Logout</button>
+    </div>
+    <pre id="authOut">not connected</pre>
+  </section>
+
+  <section>
+    <h2>2 · Register the agent key</h2>
+    <p style="margin:0 0 .5rem">
+      Generate the keypair with <code>npm run vault -- agent-key</code>, then paste the public key.
+      The private half stays in your macOS Keychain and is never sent anywhere.
+    </p>
+    <label for="agentpub">Agent public key (SPKI, base64)</label>
+    <input id="agentpub" placeholder="MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..." />
+    <div style="margin-top:.75rem">
+      <button id="register" disabled>registerAgentKey</button>
+      <button id="listKeys" disabled>getAgentKeys</button>
+    </div>
+    <pre id="agentOut">—</pre>
+  </section>
+
+  <section>
+    <h2>3 · Issue the storage credential <span class="note">(pending activation)</span></h2>
+    <p style="margin:0 0 .5rem">
+      <code>issueCredential</code> returns <code>cakPublicKey</code>, which becomes the vault's
+      key-encryption key. Until Credential Services are activated on your partner account this
+      will fail — that is expected, and the vault runs on a local key until then.
+    </p>
+    <label for="issuerDid">Issuer DID</label>
+    <input id="issuerDid" placeholder="did:air:..." />
+    <label for="credId">Credential ID</label>
+    <input id="credId" placeholder="twitter-vault-v1" />
+    <div style="margin-top:.75rem"><button id="issue" disabled>issueCredential</button></div>
+    <pre id="credOut">—</pre>
+  </section>
+</main>
+
+<script type="module">
+  import AirService, { BUILD_ENV } from "https://esm.sh/@mocanetwork/airkit@1.10.0";
+
+  const $ = (id) => document.getElementById(id);
+  let service = null;
+
+  const show = (el, value, cls = "") => {
+    el.className = cls;
+    el.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  };
+  const fail = (el, err) => show(el, `${err?.name ?? "Error"}: ${err?.message ?? String(err)}`, "err");
+  const setEnabled = (on) => {
+    for (const id of ["whoami", "logout", "register", "listKeys", "issue"]) $(id).disabled = !on;
+  };
+
+  $("init").onclick = async () => {
+    try {
+      show($("authOut"), "initializing…");
+      service = new AirService({ partnerId: $("partner").value.trim() });
+      // SANDBOX is the non-production build env; PRODUCTION additionally takes a
+      // credentialNetwork of 'testnet' | 'mainnet'.
+      await service.init({ buildEnv: BUILD_ENV.SANDBOX, enableLogging: true });
+      const result = await service.login();
+      setEnabled(true);
+      show($("authOut"), result, "ok");
+    } catch (err) {
+      fail($("authOut"), err);
+    }
+  };
+
+  $("whoami").onclick = async () => {
+    try {
+      const [info, token] = await Promise.all([service.getUserInfo(), service.getAccessToken()]);
+      show($("authOut"), { info, accessTokenPrefix: `${token.token.slice(0, 24)}…` }, "ok");
+    } catch (err) { fail($("authOut"), err); }
+  };
+
+  $("logout").onclick = async () => {
+    try { await service.logout(); setEnabled(false); show($("authOut"), "logged out"); }
+    catch (err) { fail($("authOut"), err); }
+  };
+
+  $("register").onclick = async () => {
+    const pub = $("agentpub").value.trim();
+    if (!pub) return show($("agentOut"), "paste the agent public key first", "err");
+    try { show($("agentOut"), await service.registerAgentKey(pub), "ok"); }
+    catch (err) { fail($("agentOut"), err); }
+  };
+
+  $("listKeys").onclick = async () => {
+    try { show($("agentOut"), await service.getAgentKeys(), "ok"); }
+    catch (err) { fail($("agentOut"), err); }
+  };
+
+  $("issue").onclick = async () => {
+    try {
+      const { token } = await service.getAccessToken();
+      const res = await service.issueCredential({
+        authToken: token,
+        issuerDid: $("issuerDid").value.trim(),
+        credentialId: $("credId").value.trim(),
+        credentialSubject: { purpose: "twitter-vault-encryption" },
+        curve: "secp256r1",
+        waitForOnchainCompletion: true,
+      });
+      show($("credOut"), res, "ok");
+    } catch (err) { fail($("credOut"), err); }
+  };
+</script>
+</body>
+</html>

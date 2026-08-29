@@ -1,0 +1,17 @@
+# pnpm 10+ refuses to run a dependency's install scripts unless it is listed here.
+#
+# Both of these genuinely need one, and neither is optional:
+#
+#   better-sqlite3  compiles a native addon. Without the build, `openIndex()` throws
+#                   "Could not locate the bindings file" and the vault cannot start at
+#                   all — not the HTTP transport, not stdio, not the CLI.
+#   esbuild         installs the platform binary that tsx runs on.
+#
+# This file previously held the scaffold's placeholder text ("set this to true or
+# false"), which pnpm treats as not-approved. The effect is silent: `pnpm install`
+# succeeds, `pnpm rebuild` prints nothing, and the missing addon only surfaces the next
+# time the process starts. A long-running server keeps working from the already-open
+# inode under node_modules/.ignored, so the breakage can hide for as long as it stays up.
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
